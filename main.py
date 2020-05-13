@@ -71,7 +71,7 @@ class Scene:
 
 
 scenes = {}
-os.chdir("1")
+os.chdir("3")
 for file in glob.glob("flags.nc"):
     scene = Scene(file, onlyPic=True, onlyFull=True)
     for channel in scene.channels.values():
@@ -80,20 +80,26 @@ for file in glob.glob("flags.nc"):
         # channel.printMeta()
     scenes[file] = scene
 
-for flag in scenes['flags.nc'].channels.values():
-    print(flag.flags)
+# for flag in scenes['flags.nc'].channels.values():
+#     print(flag.flags)
 print(scenes['flags.nc'].channels['OLC_flags'].flags)
 cloudmask = scenes['flags.nc'].channels['OLC_flags'].picture
-resultpic = np.zeros((cloudmask.shape + (3,)))
+resultpic = np.full((cloudmask.shape + (3,)),  [255, 187, 153])
+print(np.max(cloudmask))
 resultpic[cloudmask >= 4096] = [0, 200, 0]
-cloudmask[cloudmask >= 4096] -= 4096
+cloudmask %= 4096
+print(np.max(cloudmask))
 resultpic[cloudmask >= 2048] = [200, 0, 0]
-cloudmask[cloudmask >= 2048] -= 2048
+cloudmask %= 2048
+print(np.max(cloudmask))
 resultpic[cloudmask >= 1024] = [200, 0, 0]
-cloudmask[cloudmask >= 1024] -= 1024
+cloudmask %= 1024
+print(np.max(cloudmask))
 resultpic[cloudmask >= 512] = [100, 0, 0]
-cloudmask[cloudmask >= 512] -= 512
+cloudmask %= 512
+print(np.max(cloudmask))
 resultpic[cloudmask >= 256] = [250, 250, 250]
-cloudmask[cloudmask >= 256] -= 256
+cloudmask %= 256
+print(np.max(cloudmask))
 resultpic[cloudmask >= 128] = [0, 0, 200]
 cv2.imwrite("../output1.jpg", resultpic)
