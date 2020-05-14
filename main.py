@@ -4,14 +4,20 @@ import cv2
 import glob, os
 from zipfile import ZipFile
 import sys
-
 import warnings
-
 warnings.filterwarnings("ignore")
 
 
 class Channel:
     def __init__(self, name, longname, picture, flags="", wavelength=-1):
+        """
+        Класс хранения одного кадра спутниковой сцены
+        :param name: Короткое название канала
+        :param longname: Полное название канала
+        :param picture: Изображение с канала
+        :param flags: Флаги, если канал размечен
+        :param wavelength: Длина волны, если имеется
+        """
         self.name = name
         self.longname = longname
         self.picture = picture
@@ -20,16 +26,33 @@ class Channel:
         self.updateMeta()
 
     def updateMeta(self):
+        """
+        Обновляет метаинформацию о канале
+        min - минимаельное значение пикселя канала
+        max - максимальное значение пикселя канала
+        shape - форма изображенния канала
+        :return:
+        """
         self.min = np.min(self.picture)
         self.max = np.max(self.picture)
         self.shape = self.picture.shape
 
     def normalise(self):
+        """
+        Сдвигает спектр изображения канала до интервала [0; 255]
+        :return:
+        """
         self.picture -= self.min
         self.picture = self.picture * 255 / np.max(self.picture)
         self.updateMeta()
 
     def save(self, folder, printMeta=True):
+        """
+        Сохраняет изображение с канала как картинку
+        :param folder: Путь до папки сохранения
+        :param printMeta: Нужно ли печатать информацию об успешности сохранения
+        :return:
+        """
         try:
             cv2.imwrite(folder + "/" + self.name + ".jpg", self.picture)
             if printMeta: print(self.name + " saved in " + folder)
@@ -37,6 +60,10 @@ class Channel:
             if printMeta: print("Can't save " + self.name, file=sys.stderr)
 
     def printMeta(self):
+        """
+        печатает метаинформацию о канале
+        :return:
+        """
         print(self.name, self.longname, '\n',
               'min:', self.min,
               'max:', self.max,
@@ -45,6 +72,12 @@ class Channel:
 
 class Scene:
     def __init__(self, filename, onlyPic=False, onlyFull=False):
+        """
+        Класс спутниковой сцены, которая хранит информацию об изображениях в отдельных каналах
+        :param filename: название файла, хранящего спутниковую сцену
+        :param onlyPic: True, если нужно обрабатывать только каналы с картинкой
+        :param onlyFull: True, если нужно только каналы с полным изображением
+        """
         self.channels = {}
         nc = Dataset(filename, "r")
         for channelName in nc.variables:
