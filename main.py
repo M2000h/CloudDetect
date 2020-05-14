@@ -2,7 +2,6 @@ from netCDF4 import Dataset
 import numpy as np
 import cv2
 import glob, os
-from zipfile import ZipFile
 import sys
 import warnings
 warnings.filterwarnings("ignore")
@@ -54,8 +53,8 @@ class Channel:
         :return:
         """
         try:
-            cv2.imwrite(folder + "/" + self.name + ".jpg", self.picture)
-            if printMeta: print(self.name + " saved in " + folder)
+            cv2.imwrite(folder + "/" + self.longname + ".jpg", self.picture)
+            if printMeta: print(self.longname + " saved in " + folder)
         except:
             if printMeta: print("Can't save " + self.name, file=sys.stderr)
 
@@ -117,18 +116,15 @@ for file in glob.glob("Syn_Oa10_reflectance.nc"):
 
 # input('>>>')
 
-for flag in scenes['flags.nc'].channels:
-    print(flag, scenes['flags.nc'].channels[flag].name, scenes['flags.nc'].channels[flag].flags)
-
 general_mask = scenes['flags.nc'].channels['OLC_flags'].picture
 cloud_mask = scenes['flags.nc'].channels['CLOUD_flags'].picture
 cloud_land_mask = scenes['Syn_Oa10_reflectance.nc'].channels['SDR_Oa10_err'].picture
 
-resultpic = np.full((general_mask.shape + (3,)), [255, 187, 153])
-resultpic[general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
-resultpic[general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
-resultpic[cloud_mask % 2 == 1] = [250, 250, 250]
-cv2.imwrite("../result.jpg", resultpic)
+# resultpic = np.full((general_mask.shape + (3,)), [255, 187, 153])
+# resultpic[general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
+# resultpic[general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
+# resultpic[cloud_mask % 2 == 1] = [250, 250, 250]
+# cv2.imwrite("../result.jpg", resultpic)
 
 landpik = np.full((general_mask.shape + (3,)), [255, 187, 153])
 landmask = np.zeros(general_mask.shape)
@@ -143,4 +139,4 @@ cloud_land_mask[landmask == 0] = 1000
 landpik[cloud_land_mask < 100] = [250, 250, 250]
 cv2.imwrite("../land.jpg", landpik)
 
-print(np.mean(resultpic != landpik))
+# print(np.mean(resultpic != landpik))
