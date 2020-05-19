@@ -8,48 +8,41 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-class GaussianNB():
-    def __init__(self):
-        pass
-
-    def fit(self, X, y):
-        return self._partial_fit(X, y, np.unique(y))
+class GaussianNB:
+    """
+    Класс байесовского классификатора
+    """
+    def __init__(self, X, y):
+        """
+        функция создания и обучения модели
+        :param X: входные данные
+        :param y: выходные данные
+        """
+        self.classes = np.unique(y)
+        shape = (2, X.shape[1])
+        self.theta_ = np.zeros(shape)
+        self.sigma_ = np.zeros(shape)
+        self.class_count_ = np.zeros(2, dtype=np.float64)
+        for y_i in self.classes:
+            i = self.classes.searchsorted(y_i)
+            X_i = X[y == y_i, :]
+            self.theta_[i, :] = np.mean(X_i)
+            self.sigma_[i, :] = np.var(X_i)
+            self.class_count_[i] += X_i.shape[0]
+        self.sigma_[:, :] += 1e-9 * np.var(X).max()
+        self.class_prior_ = self.class_count_ / self.class_count_.sum()
 
     def predict(self, X):
-        jll = self._joint_log_likelihood(X)
-        return self.classes_[np.argmax(jll, axis=1)]
-
-    def _partial_fit(self, X, y, classes=None):
-        self.epsilon_ = 1e-9 * np.var(X, axis=0).max()
-        self.classes_ = classes
-        n_features = X.shape[1]
-        n_classes = len(self.classes_)
-        self.theta_ = np.zeros((n_classes, n_features))
-        self.sigma_ = np.zeros((n_classes, n_features))
-        self.class_count_ = np.zeros(n_classes, dtype=np.float64)
-        self.class_prior_ = np.zeros(n_classes, dtype=np.float64)
-        unique_y = np.unique(y)
-        for y_i in unique_y:
-            i = classes.searchsorted(y_i)
-            X_i = X[y == y_i, :]
-            N_i = X_i.shape[0]
-            self.theta_[i, :] = np.mean(X_i, axis=0)
-            self.sigma_[i, :] = np.var(X_i, axis=0)
-            self.class_count_[i] += N_i
-        self.sigma_[:, :] += self.epsilon_
-        self.class_prior_ = self.class_count_ / self.class_count_.sum()
-        return self
-
-    def _joint_log_likelihood(self, X):
-        joint_log_likelihood = []
-        for i in range(np.size(self.classes_)):
-            jointi = np.log(self.class_prior_[i])
-            n_ij = - 0.5 * np.sum(np.log(2. * np.pi * self.sigma_[i, :]))
-            n_ij -= 0.5 * np.sum(((X - self.theta_[i, :]) ** 2) /
-                                 (self.sigma_[i, :]), 1)
-            joint_log_likelihood.append(jointi + n_ij)
-        joint_log_likelihood = np.array(joint_log_likelihood).T
-        return joint_log_likelihood
+        """
+        Функция предсказания результата
+        :param X: входные данные
+        :return: Предсказание
+        """
+        joint_log_likelihood = [np.log(self.class_prior_[i]) -
+                                0.5 * (np.sum(np.log(2. * np.pi * self.sigma_[i, :]))
+                                       + np.sum(((X - self.theta_[i, :]) ** 2) / (self.sigma_[i, :]),1))
+                                for i in range(2)]
+        return self.classes[np.argmax(np.array(joint_log_likelihood).T, axis=1)]
 
 
 class Channel:
@@ -185,19 +178,17 @@ cloud_mask[cloud_mask % 2 == 1] = 1
 cloud_mask[cloud_mask % 2 == 0] = 0
 
 ai_pic = landpik.copy()
-model = GaussianNB()
 landmask_arr = np.concatenate(landmask)
 cloud_arr = np.concatenate(cloud_land_mask_sensor).reshape(-1, 1)
 cloud_test_mask = np.concatenate(cloud_mask)
 
 print('start fit')
-model.fit(cloud_arr, cloud_test_mask)
+model = GaussianNB(cloud_arr, cloud_test_mask)
 
 i = 0
 
 print('start predict')
 ai_mask = model.predict(np.concatenate(cloud_land_mask_sensor).reshape(-1, 1)).reshape(-1, general_mask.shape[1])
-
 ai_mask[landmask == 0] = 0
 ai_pic[ai_mask == 1] = [250, 250, 250]
 
