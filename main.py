@@ -12,6 +12,7 @@ class GaussianNB:
     """
     Класс байесовского классификатора
     """
+
     def __init__(self, X, y):
         """
         функция создания и обучения модели
@@ -40,7 +41,7 @@ class GaussianNB:
         """
         joint_log_likelihood = [np.log(self.class_prior_[i]) -
                                 0.5 * (np.sum(np.log(2. * np.pi * self.sigma_[i, :]))
-                                       + np.sum(((X - self.theta_[i, :]) ** 2) / (self.sigma_[i, :]),1))
+                                       + np.sum(((X - self.theta_[i, :]) ** 2) / (self.sigma_[i, :]), 1))
                                 for i in range(2)]
         return self.classes[np.argmax(np.array(joint_log_likelihood).T, axis=1)]
 
@@ -140,63 +141,78 @@ class Scene:
                 self.channels[channelName] = channel
 
 
-scenes = {}
-os.chdir("last_test_2")
-for file in glob.glob("*.nc"):
-    scene = Scene(file, onlyPic=True, onlyFull=True)
-    # for channel in scene.channels.values():
-    #     channel.normalise()
-    #     channel.save("../pics", printMeta=False)
-    #     channel.printMeta()
-    scenes[file] = scene
-for file in glob.glob("Syn_Oa10_reflectance.nc"):
-    scene = Scene(file, onlyPic=True, onlyFull=True)
-    scenes[file] = scene
+class FullScene:
+    def __init__(self, folder):
+        self.scenes = {}
+        self.folder = folder
+        for file in glob.glob(folder + "/*.nc"):
+            scene = Scene(file, onlyPic=True, onlyFull=True)
+            self.scenes[file] = scene
+        self.general_mask = self.scenes[folder + '\\flags.nc'].channels['OLC_flags'].picture
+        self.cloud_mask = self.scenes[folder + '\\flags.nc'].channels['CLOUD_flags'].picture
+        self.cloud_land_mask_sensor = self.scenes[folder + '\\Syn_Oa10_reflectance.nc'].channels['SDR_Oa10_err'].picture
+        self.landmask = np.zeros(self.general_mask.shape)
+        self.landmask[self.general_mask // 4096 % 2 == 1] = 1  # OLC_land
+        self.landmask[self.general_mask // 1024 % 2 == 1] = 0  # OLC_fresh_inland_water
 
-general_mask = scenes['flags.nc'].channels['OLC_flags'].picture
-cloud_mask = scenes['flags.nc'].channels['CLOUD_flags'].picture
-cloud_land_mask_sensor = scenes['Syn_Oa10_reflectance.nc'].channels['SDR_Oa10_err'].picture
+    def saveOriginal(self, filename):
+        resultpic = np.full((self.general_mask.shape + (3,)), [255, 187, 153])  # Sea
+        resultpic[self.general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
+        resultpic[self.general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
+        resultpic[self.cloud_mask % 2 == 1] = [250, 250, 250]
+        self.orig_pic = resultpic
+        cv2.imwrite(filename, resultpic)
 
-resultpic = np.full((general_mask.shape + (3,)), [255, 187, 153])
-resultpic[general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
-resultpic[general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
-resultpic[cloud_mask % 2 == 1] = [250, 250, 250]
-cv2.imwrite("../result.jpg", resultpic)
+    def saveIFmteod(self, filename):
+        landpik = np.full((self.general_mask.shape + (3,)), [255, 187, 153])
+        landpik[self.general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
+        landpik[self.general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
+        cloud_land_mask_sensor = self.cloud_land_mask_sensor.copy()
+        cloud_mask_copy = self.cloud_mask.copy()
+        cloud_mask_copy[self.landmask == 1] = 0
+        landpik[cloud_mask_copy % 2 == 1] = [250, 250, 250]
+        cloud_land_mask_sensor[self.landmask == 0] = 1000
+        landpik[cloud_land_mask_sensor < 100] = [250, 250, 250]
+        self.if_pic = landpik
+        cv2.imwrite(filename, landpik)
 
-landpik = np.full((general_mask.shape + (3,)), [255, 187, 153])
-landmask = np.zeros(general_mask.shape)
+    def saveAImetod(self, filename, model, isModelEmpty=False):
+        cloud_mask = self.cloud_mask.copy()
+        cloud_mask[cloud_mask % 2 == 1] = 1
+        cloud_mask[cloud_mask % 2 == 0] = 0
+        if isModelEmpty:
+            cloud_arr = np.concatenate(self.cloud_land_mask_sensor).reshape(-1, 1)
+            cloud_test_mask = np.concatenate(cloud_mask)
+            model = GaussianNB(cloud_arr, cloud_test_mask)
+        ai_mask = model.predict(np.concatenate(self.cloud_land_mask_sensor).reshape(-1, 1)).reshape(-1, self.general_mask.shape[1])
+        landpik = np.full((self.general_mask.shape + (3,)), [255, 187, 153])
+        landpik[self.general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
+        landpik[self.general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
+        cloud_mask_copy = cloud_mask.copy()
+        cloud_mask_copy[self.landmask == 1] = 0
+        landpik[cloud_mask_copy % 2 == 1] = [250, 250, 250]
+        ai_pic = landpik.copy()
+        ai_mask[self.landmask == 0] = 0
+        ai_pic[ai_mask == 1] = [250, 250, 250]
+        self.ai_pic=ai_pic
+        cv2.imwrite(filename, ai_pic)
+        return model
 
-landpik[general_mask // 4096 % 2 == 1] = [0, 200, 0]  # OLC_land
-landpik[general_mask // 1024 % 2 == 1] = [100, 0, 0]  # OLC_fresh_inland_water
-landmask[general_mask // 4096 % 2 == 1] = 1  # OLC_land
-landmask[general_mask // 1024 % 2 == 1] = 0  # OLC_fresh_inland_water
-cloud_mask_copy = cloud_mask.copy()
-cloud_mask_copy[landmask == 1] = 0
-landpik[cloud_mask_copy % 2 == 1] = [250, 250, 250]
 
-cloud_mask[cloud_mask % 2 == 1] = 1
-cloud_mask[cloud_mask % 2 == 0] = 0
+krym = FullScene('last_test_2')
+krym.saveOriginal('krum_orig.jpg')
+krym.saveIFmteod('krum_IF.jpg')
+model = krym.saveAImetod(filename="ktym_AI.jpg", model=None, isModelEmpty=True)
 
-ai_pic = landpik.copy()
-landmask_arr = np.concatenate(landmask)
-cloud_arr = np.concatenate(cloud_land_mask_sensor).reshape(-1, 1)
-cloud_test_mask = np.concatenate(cloud_mask)
 
-print('start fit')
-model = GaussianNB(cloud_arr, cloud_test_mask)
+print(np.mean(krym.orig_pic != krym.if_pic))
+print(np.mean(krym.orig_pic != krym.ai_pic))
 
-i = 0
 
-print('start predict')
-ai_mask = model.predict(np.concatenate(cloud_land_mask_sensor).reshape(-1, 1)).reshape(-1, general_mask.shape[1])
-ai_mask[landmask == 0] = 0
-ai_pic[ai_mask == 1] = [250, 250, 250]
+italy = FullScene('last_test_1')
+italy.saveOriginal('italy_orig.jpg')
+italy.saveIFmteod('italy_IF.jpg')
+italy.saveAImetod(filename="italy_AI.jpg", model=model, isModelEmpty=False)
 
-cloud_land_mask_sensor[landmask == 0] = 1000
-landpik[cloud_land_mask_sensor < 100] = [250, 250, 250]
-cv2.imwrite("../land.jpg", landpik)
-
-cv2.imwrite("../ai_pic.jpg", ai_pic)
-
-print(np.mean(resultpic != landpik))
-print(np.mean(resultpic != ai_pic))
+print(np.mean(italy.orig_pic != italy.if_pic))
+print(np.mean(italy.orig_pic != italy.ai_pic))
